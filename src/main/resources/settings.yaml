@@ -7,6 +7,7 @@ responseSystem: ${FHIRSPARK_RESPONSESYSTEM:-https://cbioportal.org/response/}
 followUpSystem: ${FHIRSPARK_FOLLOWUPSYSTEM:-https://cbioportal.org/followup/}
 patientSystem: ${FHIRSPARK_PATIENTSYSTEM:-https://cbioportal.org/patient/}
 serviceRequestSystem: ${FHIRSPARK_SERVICEREQUESTSYSTEM:-https://cbioportal.org/servicerequest/}
+conditionSystem: ${FHIRSPARK_CONDITIONSYSTEM:-https://cbioportal.org/condition/}
 portalUrl: ${FHIRSPARK_PORTALURL:-http://localhost:8080/}
 loginRequired: ${FHIRSPARK_LOGINREQUIRED:-false}
 hgncPath: ${FHIRSPARK_HGNCPATH:-hgnc.csv}

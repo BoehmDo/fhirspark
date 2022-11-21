@@ -17,6 +17,7 @@ import java.util.List;
     "orderId",
     "rebiopsyRecommendation",
     "samples",
+    "diagnosis",
     "therapyRecommendations"
 })
 public class Mtb {
@@ -39,6 +40,8 @@ public class Mtb {
     private Boolean rebiopsyRecommendation;
     @JsonProperty("samples")
     private List<String> samples;
+    @JsonProperty("diagnosis")
+    private List<String> diagnosis;
     @JsonProperty("therapyRecommendations")
     private List<TherapyRecommendation> therapyRecommendations;
 
@@ -174,6 +177,21 @@ public class Mtb {
 
     public Mtb withSamples(List<String> samples) {
         this.samples = samples;
+        return this;
+    }
+
+    @JsonProperty("diagnosis")
+    public List<String> getDiagnosis() {
+        return diagnosis;
+    }
+
+    @JsonProperty("diagnosis")
+    public void setDiagnosis(List<String> diagnosis) {
+        this.diagnosis = diagnosis;
+    }
+
+    public Mtb withDiagnosis(List<String> diagnosis) {
+        this.diagnosis = diagnosis;
         return this;
     }
 
