@@ -41,13 +41,16 @@ public final class TherapyRecommendationAdapter {
     private TherapyRecommendationAdapter() {
     }
 
-    public static void initialize(String newTherapyRecommendationUri, String newPatientUri) {
+    public static void initialize(String newTherapyRecommendationUri, String newPatientUri,
+        String newConditionUri, String newStudyUri) {
+
         TherapyRecommendationAdapter.therapyRecommendationUri = newTherapyRecommendationUri;
         TherapyRecommendationAdapter.patientUri = newPatientUri;
     }
 
     public static Observation fromJson(Bundle bundle, List<Regex> regex, DiagnosticReport diagnosticReport,
-            Reference fhirPatient, TherapyRecommendation therapyRecommendation, Map<String, Observation> unique) {
+            Reference fhirPatient, TherapyRecommendation therapyRecommendation,
+             Map<String, Observation> unique) {
         Observation therapeuticImplication = new Observation();
         therapeuticImplication.setId(IdType.newRandomUuid());
         therapeuticImplication.getMeta().addProfile(GenomicsReportingEnum.THERAPEUTIC_IMPLICATION.getSystem());
@@ -74,7 +77,7 @@ public final class TherapyRecommendationAdapter {
         }
 
         evidenceComponent.getValueCodeableConcept().addCoding(new Coding("https://cbioportal.org/evidence/BW/",
-                evidenceLevelCode, evidenceLevelDisplay));
+            evidenceLevelCode, evidenceLevelDisplay));
 
         therapeuticImplication.addIdentifier().setSystem(therapyRecommendationUri)
                 .setValue(therapyRecommendation.getId());

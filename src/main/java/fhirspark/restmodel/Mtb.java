@@ -36,12 +36,14 @@ public class Mtb {
     private String mtbState;
     @JsonProperty("orderId")
     private String orderId;
+    @JsonProperty("studyId")
+    private String studyId;
     @JsonProperty("rebiopsyRecommendation")
     private Boolean rebiopsyRecommendation;
     @JsonProperty("samples")
     private List<String> samples;
     @JsonProperty("diagnosis")
-    private List<String> diagnosis;
+    private String diagnosis;
     @JsonProperty("therapyRecommendations")
     private List<TherapyRecommendation> therapyRecommendations;
 
@@ -150,6 +152,21 @@ public class Mtb {
         return this;
     }
 
+    @JsonProperty("studyId")
+    public String getStudyId() {
+        return studyId;
+    }
+  
+    @JsonProperty("studyId")
+    public void setStudyId(String studyId) {
+        this.studyId = studyId;
+    }
+  
+    public Mtb withStudyId(String studyId) {
+        this.studyId = studyId;
+        return this;
+    }
+
     @JsonProperty("rebiopsyRecommendation")
     public Boolean getRebiopsyRecommendation() {
         return rebiopsyRecommendation;
@@ -181,16 +198,16 @@ public class Mtb {
     }
 
     @JsonProperty("diagnosis")
-    public List<String> getDiagnosis() {
-        return diagnosis;
+    public String getDiagnosis() {
+        return orderId;
     }
-
+  
     @JsonProperty("diagnosis")
-    public void setDiagnosis(List<String> diagnosis) {
+    public void setDiagnosis(String diagnosis) {
         this.diagnosis = diagnosis;
     }
-
-    public Mtb withDiagnosis(List<String> diagnosis) {
+  
+    public Mtb withDiagnosis(String diagnosis) {
         this.diagnosis = diagnosis;
         return this;
     }

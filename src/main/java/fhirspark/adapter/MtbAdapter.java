@@ -6,14 +6,12 @@ import fhirspark.definitions.GenomicsReportingEnum;
 import fhirspark.definitions.Hl7TerminologyEnum;
 import fhirspark.definitions.LoincEnum;
 import fhirspark.definitions.MolekulargenetischerBefundberichtEnum;
-import fhirspark.definitions.SnomedEnum;
-import fhirspark.definitions.UriEnum;
 import fhirspark.restmodel.Mtb;
 import fhirspark.restmodel.TherapyRecommendation;
 import fhirspark.settings.Regex;
 import fhirspark.settings.Settings;
 import org.hl7.fhir.r4.model.Bundle;
-import org.hl7.fhir.r4.model.CodeableConcept;
+import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.Condition;
 import org.hl7.fhir.r4.model.DiagnosticReport;
@@ -28,7 +26,6 @@ import org.hl7.fhir.r4.model.ServiceRequest;
 import org.hl7.fhir.r4.model.ServiceRequest.ServiceRequestStatus;
 import org.hl7.fhir.r4.model.Specimen;
 import org.hl7.fhir.r4.model.Task;
-import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.r4.model.Task.TaskIntent;
 import org.hl7.fhir.r4.model.Task.TaskStatus;
 
@@ -47,6 +44,7 @@ public final class MtbAdapter {
     private static String mtbUri;
     private static String serviceRequestUri;
     private static String conditionUri;
+    private static String studyUri;
 
     private MtbAdapter() {
     }
@@ -58,6 +56,7 @@ public final class MtbAdapter {
         MtbAdapter.mtbUri = settings.getDiagnosticReportSystem();
         MtbAdapter.serviceRequestUri = settings.getServiceRequestSystem();
         MtbAdapter.conditionUri = settings.getConditionSystem();
+        MtbAdapter.studyUri = settings.getStudySystem();
     }
 
     public static Mtb toJson(List<Regex> regex, String patientId,
@@ -82,17 +81,19 @@ public final class MtbAdapter {
         mtb.setDate(f.format(diagnosticReport.getEffectiveDateTimeType().toCalendar().getTime()));
 
         mtb.setGeneralRecommendation(diagnosticReport.getConclusion());
-        
+
         //DIAGNOSIS HERE
-        ArrayList<String> diagnosisList = new ArrayList<String>();
-        Bundle b2 = (Bundle) client.search().forResource(Condition.class).where(new TokenClientParam("_id")
-                    .exactly().code(diagnosticReport.getSubject().getId())).prettyPrint()
+        Bundle b2 = (Bundle) client.search().forResource(Condition.class).where(new TokenClientParam("identifier")
+                    .exactly().systemAndCode(conditionUri, diagnosticReport.getIdentifierFirstRep().getValue()))
+                    .prettyPrint()
                     .execute();
-        for(BundleEntryComponent diag : b2.getEntry()){
+        for (BundleEntryComponent diag : b2.getEntry()) {
             Condition diagnosis = (Condition) diag.getResource();
-            diagnosisList.add(diagnosis.getCode().getCodingFirstRep().getCode());
+            mtb.setDiagnosis(diagnosis.getCode().getCodingFirstRep().getCode());
         }
-        mtb.setDiagnosis(diagnosisList);
+
+        //STUDYID HERE
+
 
         // GENETIC COUNSELING HERE
         mtb.setId("mtb_" + patientId + "_" + diagnosticReport.getIssued().getTime());
@@ -140,7 +141,9 @@ public final class MtbAdapter {
 
     }
 
-    public static void fromJson(Bundle bundle, List<Regex> regex, Reference fhirPatient, String patientId, Mtb mtb) {
+    public static void fromJson(Bundle bundle, List<Regex> regex, Reference fhirPatient,
+        String patientId, String studyId, Mtb mtb) {
+
         DiagnosticReport diagnosticReport = new DiagnosticReport();
         diagnosticReport.getMeta().addProfile(GenomicsReportingEnum.GENOMICS_REPORT.getSystem());
         diagnosticReport.getMeta().addProfile(MolekulargenetischerBefundberichtEnum.GENOMICS_REPORT.getSystem());
@@ -149,25 +152,6 @@ public final class MtbAdapter {
         diagnosticReport.addCategory().addCoding(Hl7TerminologyEnum.GE.toCoding());
         diagnosticReport.getCode()
                 .addCoding(LoincEnum.MASTER_HL7_GENETIC_VARIANT_REPORTING_PANEL.toCoding());
-
-        if(mtb.getDiagnosis() != null && !mtb.getDiagnosis().isEmpty()){
-            
-            Condition cn = new Condition();
-            
-            cn.setSubject(fhirPatient);
-
-            cn.getRecordedDateElement().fromStringValue(mtb.getDate());
-
-            CodeableConcept cc = new CodeableConcept();
-            cc.getCodingFirstRep().setCode(mtb.getDiagnosis().get(0));
-            cc.getCodingFirstRep().setSystem(UriEnum.SNOMED.getUri());
-
-            bundle.addEntry().setFullUrl(cn.getIdElement().getValue()).setResource(cn).getRequest()
-                    .setUrl("Condition?identifier=" + conditionUri + "|" + mtb.getOrderId())
-                    .setIfNoneExist("identifier=" + conditionUri
-                            + "|" + mtb.getOrderId())
-                    .setMethod(Bundle.HTTPVerb.PUT);
-        }
 
         if (mtb.getOrderId() != null && !mtb.getOrderId().isEmpty()) {
             ServiceRequest sr = new ServiceRequest();
@@ -194,6 +178,7 @@ public final class MtbAdapter {
         diagnosticReport.setConclusion(mtb.getGeneralRecommendation());
 
         diagnosticReport.addIdentifier().setSystem(mtbUri).setValue(mtb.getId());
+        diagnosticReport.addIdentifier().setSystem(studyUri).setValue(studyId);
 
         if (mtb.getGeneticCounselingRecommendation() != null && mtb.getGeneticCounselingRecommendation()) {
             Task t = new Task();
@@ -245,7 +230,7 @@ public final class MtbAdapter {
         Map<String, Observation> unique = new HashMap<>();
         for (TherapyRecommendation therapyRecommendation : mtb.getTherapyRecommendations()) {
             Observation efficacyObservation = TherapyRecommendationAdapter.fromJson(bundle, regex, diagnosticReport,
-                    fhirPatient, therapyRecommendation, unique);
+                    fhirPatient, therapyRecommendation, unique).setSubject(fhirPatient);
             bundle.addEntry().setFullUrl(efficacyObservation.getIdElement().getValue())
                     .setResource(efficacyObservation).getRequest()
                     .setUrl("Observation?identifier=" + therapyRecommendationUri + "|"

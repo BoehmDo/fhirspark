@@ -49,6 +49,8 @@ public final class Settings {
     private String serviceRequestSystem;
     @JsonProperty("conditionSystem")
     private String conditionSystem;
+    @JsonProperty("studySystem")
+    private String studySystem;
     @JsonProperty("hgncPath")
     private String hgncPath;
     @JsonProperty("portalUrl")
@@ -148,6 +150,16 @@ public final class Settings {
     @JsonProperty("conditionSystem")
     public void setConditionSystem(String conditionSystem) {
         this.conditionSystem = conditionSystem;
+    }
+
+    @JsonProperty("studySystem")
+    public String getStudySystem() {
+        return studySystem;
+    }
+
+    @JsonProperty("studySystem")
+    public void setStudySystem(String studySystem) {
+        this.studySystem = studySystem;
     }
 
     @JsonProperty("hgncPath")

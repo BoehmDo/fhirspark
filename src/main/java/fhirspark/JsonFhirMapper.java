@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import fhirspark.adapter.ClinicalTrialAdapter;
 import fhirspark.adapter.FollowUpAdapter;
 import fhirspark.adapter.MtbAdapter;
+import fhirspark.adapter.ReasoningAdapter;
+import fhirspark.adapter.TherapyRecommendationAdapter;
 import fhirspark.definitions.GenomicsReportingEnum;
 import fhirspark.definitions.Hl7TerminologyEnum;
 import fhirspark.definitions.LoincEnum;
@@ -23,6 +25,7 @@ import fhirspark.restmodel.FollowUp;
 import fhirspark.restmodel.GeneticAlteration;
 import fhirspark.restmodel.Mtb;
 import fhirspark.restmodel.Reasoning;
+import fhirspark.restmodel.ResponseCriteria;
 import fhirspark.restmodel.TherapyRecommendation;
 import fhirspark.restmodel.Treatment;
 import fhirspark.settings.Settings;
@@ -31,6 +34,7 @@ import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.r4.model.DiagnosticReport;
 import org.hl7.fhir.r4.model.IdType;
+import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Identifier.IdentifierUse;
 import org.hl7.fhir.r4.model.MedicationStatement;
 import org.hl7.fhir.r4.model.Observation;
@@ -42,6 +46,8 @@ import org.hl7.fhir.r4.model.RelatedArtifact.RelatedArtifactType;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -63,6 +69,7 @@ public class JsonFhirMapper {
     private static String therapyRecommendationUri;
     private static String followUpUri;
     private static String mtbUri;
+    private static String studyUri;
     private static Settings settings;
 
     private FhirContext ctx = FhirContext.forR4();
@@ -86,6 +93,7 @@ public class JsonFhirMapper {
         JsonFhirMapper.therapyRecommendationUri = settings.getObservationSystem();
         JsonFhirMapper.followUpUri = settings.getFollowUpSystem();
         JsonFhirMapper.mtbUri = settings.getDiagnosticReportSystem();
+        JsonFhirMapper.studyUri = settings.getStudySystem();
 
     }
 
@@ -134,7 +142,7 @@ public class JsonFhirMapper {
     /**
      * Retrieves MTB data from cBioPortal and persists it in FHIR resources.
      */
-    public void mtbFromJson(String patientId, List<Mtb> mtbs) throws DataFormatException, IOException {
+    public void mtbFromJson(String patientId, String studyId, List<Mtb> mtbs) throws DataFormatException, IOException {
 
         Bundle bundle = new Bundle();
         bundle.setType(Bundle.BundleType.TRANSACTION);
@@ -142,7 +150,7 @@ public class JsonFhirMapper {
         Reference fhirPatient = getOrCreatePatient(bundle, patientId);
 
         for (Mtb mtb : mtbs) {
-            MtbAdapter.fromJson(bundle, settings.getRegex(), fhirPatient, patientId, mtb);
+            MtbAdapter.fromJson(bundle, settings.getRegex(), fhirPatient, patientId, studyId, mtb);
         }
 
         try {
@@ -356,24 +364,40 @@ public class JsonFhirMapper {
                 .where(new TokenClientParam("component-value-concept").exactly()
                         .systemAndValues(UriEnum.NCBI_GENE.getUri(), new ArrayList<>(entrez)))
                 .prettyPrint().revInclude(Observation.INCLUDE_DERIVED_FROM).execute();
-
         Map<String, TherapyRecommendation> tcMap = new HashMap<>();
-
         for (BundleEntryComponent bec : bStuff.getEntry()) {
             Observation ob = (Observation) bec.getResource();
             if (!ob.getMeta().hasProfile(GenomicsReportingEnum.THERAPEUTIC_IMPLICATION.getSystem())) {
                 continue;
             }
-
             TherapyRecommendation therapyRecommendation = new TherapyRecommendation()
                     .withComment(new ArrayList<>()).withReasoning(new Reasoning()).withClinicalTrial(new ArrayList<>());
             List<ClinicalDatum> clinicalData = new ArrayList<>();
             List<GeneticAlteration> geneticAlterations = new ArrayList<>();
             therapyRecommendation.getReasoning().withClinicalData(clinicalData)
                     .withGeneticAlterations(geneticAlterations);
-
             String[] id = ob.getIdentifierFirstRep().getValueElement().getValue().split("_");
             therapyRecommendation.setId(id[id.length - 1]);
+
+            Bundle bDiagnosticReports = (Bundle) client.search().forResource(DiagnosticReport.class)
+                .where(DiagnosticReport.RESULT.hasId(ob.getIdElement().getIdPart())).prettyPrint()
+                .include(DiagnosticReport.INCLUDE_SUBJECT).execute();
+            if (bDiagnosticReports.hasEntry()) {
+                DiagnosticReport mtb = (DiagnosticReport) bDiagnosticReports.getEntryFirstRep().getResource();
+                Bundle bPat = (Bundle) client.search().forResource(Patient.class)
+                    .where(new TokenClientParam("_id")
+                    .exactly().code(mtb.getSubject().getReference())).prettyPrint().execute();
+                Patient subject = (Patient) bPat.getEntryFirstRep().getResource();
+                String studyId = "";
+                for (Identifier ident : mtb.getIdentifier()) {
+                    studyId = ident.getValue();
+                }
+                therapyRecommendation.setCaseId(subject.getIdentifierFirstRep().getValue());
+                therapyRecommendation.setStudyId(studyId);
+            }
+
+            therapyRecommendation
+            .setReasoning(ReasoningAdapter.toJson(settings.getRegex(), ob.getDerivedFrom(), ob.getHasMember(), client));
 
             if (ob.hasPerformer()) {
                 Bundle b2 = (Bundle) client.search().forResource(Practitioner.class)
@@ -475,6 +499,116 @@ public class JsonFhirMapper {
 
         return tcMap.values();
 
+    }
+
+    /**
+     * Fetches followUps that have been previously associated with the
+     * same alteration.
+     *
+     * @param alterations List of alterations to consider
+     * @return List of matching therapies
+     */
+    public Collection<FollowUp> getFollowUpsByAlteration(List<GeneticAlteration> alterations) {
+
+        Set<String> entrez = new HashSet<>();
+        for (GeneticAlteration a : alterations) {
+            entrez.add(String.valueOf(a.getEntrezGeneId()));
+        }
+
+        Bundle bStuff = (Bundle) client.search().forResource(Observation.class)
+                .where(new TokenClientParam("component-value-concept").exactly()
+                        .systemAndValues(UriEnum.NCBI_GENE.getUri(), new ArrayList<>(entrez)))
+                .prettyPrint().revInclude(Observation.INCLUDE_DERIVED_FROM).execute();
+
+        Map<String, FollowUp> tcMap = new HashMap<>();
+
+        ArrayList<Identifier> idents = new ArrayList<>();
+
+        for (BundleEntryComponent bec : bStuff.getEntry()) {
+            Observation ob = (Observation) bec.getResource();
+            if (!ob.getMeta().hasProfile(GenomicsReportingEnum.THERAPEUTIC_IMPLICATION.getSystem())) {
+                continue;
+            }
+            idents.addAll(ob.getIdentifier());
+        }
+
+        Bundle bFollowUps = (Bundle) client.search().forResource(MedicationStatement.class)
+            .execute();
+
+        for (BundleEntryComponent bec : bFollowUps.getEntry()) {
+            MedicationStatement ms = (MedicationStatement) bec.getResource();
+            if (!ms.hasReasonReference()) {
+                continue;
+            }
+            FollowUp followUp = new FollowUp();
+
+            if (ms.hasInformationSource()) {
+                Bundle b2 = (Bundle) client.search().forResource(Practitioner.class).where(new TokenClientParam("_id")
+                        .exactly().code(ms.getInformationSource().getReference())).prettyPrint()
+                        .execute();
+                Practitioner author = (Practitioner) b2.getEntryFirstRep().getResource();
+                followUp.setAuthor(author.getIdentifierFirstRep().getValue());
+            }
+
+            SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd");
+            followUp.setDate(f.format(ms.getEffectiveDateTimeType().toCalendar().getTime()));
+
+            followUp.setId(ms.getIdentifierFirstRep().getValue());
+
+            if (ms.getNote().size() > 0) {
+                followUp.setComment(ms.getNote().get(0).getText());
+            }
+
+
+            followUp.setTherapyRecommendationRealized(ms.getStatus()
+                .compareTo(MedicationStatement.MedicationStatementStatus.fromCode("completed")) == 0);
+            followUp.setSideEffect(ms.hasStatusReason());
+
+
+            ResponseCriteria respCrit = new ResponseCriteria();
+            TherapyRecommendation therapyRecommendation = new TherapyRecommendation();
+
+            for (Reference reference : ms.getReasonReference()) {
+
+                Bundle b1 = (Bundle) client.search().forResource(Observation.class)
+                    .where(new TokenClientParam("_id")
+                    .exactly().code(reference.getReference())).prettyPrint()
+                    .include(Observation.INCLUDE_DERIVED_FROM)
+                    .include(Observation.INCLUDE_SPECIMEN.asRecursive())
+                    .execute();
+
+                Observation obs = (Observation) b1.getEntryFirstRep().getResource();
+
+                if (obs.getIdentifierFirstRep().getValue().startsWith("response_")) {
+                    String tag = obs.getIdentifierFirstRep().getValue().split("_")[1];
+
+                    try {
+                        ResponseCriteria.class
+                            .getDeclaredMethod("set" + tag, Boolean.class)
+                            .invoke(respCrit, true);
+                    } catch (NoSuchMethodException e) {
+                        e.printStackTrace();
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    } catch (InvocationTargetException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+
+                    therapyRecommendation = TherapyRecommendationAdapter.toJson(client,
+                            settings.getRegex(), obs);
+
+                }
+
+            }
+
+            followUp.setTherapyRecommendation(therapyRecommendation);
+            followUp.setResponse(respCrit);
+
+            tcMap.put(ms.getIdentifierFirstRep().getValue(), followUp);
+
+        }
+        return tcMap.values();
     }
 
 }

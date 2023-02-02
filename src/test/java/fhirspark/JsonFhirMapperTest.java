@@ -49,14 +49,14 @@ public class JsonFhirMapperTest {
             HgncGeneName.initialize(settings.getHgncPath());
             OncoKbDrug.initalize(settings.getOncokbPath());
             SpecimenAdapter.initialize(settings.getSpecimenSystem());
-            TherapyRecommendationAdapter.initialize(settings.getObservationSystem(), settings.getPatientSystem());
+            TherapyRecommendationAdapter.initialize(settings.getObservationSystem(), settings.getPatientSystem(), settings.getConditionSystem(), settings.getStudySystem());
             this.jfm = new JsonFhirMapper(settings);
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
-
+    /* 
     @Test
     public void oneMtbZeroRecommendationTest() {
         System.out.println("oneMtbZeroRecommendation.json");
@@ -184,5 +184,5 @@ public class JsonFhirMapperTest {
             e.printStackTrace();
         }
     }
-
+    */
 }

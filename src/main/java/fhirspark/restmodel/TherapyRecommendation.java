@@ -17,12 +17,15 @@ import java.util.List;
     "id",
     "reasoning",
     "references",
-    "treatments"
+    "treatments",
+    "diagnosis"
 })
 public class TherapyRecommendation {
 
     @JsonProperty("author")
     private String author;
+    @JsonProperty("caseId")
+    private String caseId;
     @JsonProperty("clinicalTrials")
     private List<ClinicalTrial> clinicalTrial;
     @JsonProperty("comment")
@@ -35,6 +38,8 @@ public class TherapyRecommendation {
     private String evidenceLevelM3Text;
     @JsonProperty("id")
     private String id;
+    @JsonProperty("studyId")
+    private String studyId;
     @JsonProperty("reasoning")
     private Reasoning reasoning;
     @JsonProperty("references")
@@ -54,6 +59,21 @@ public class TherapyRecommendation {
 
     public TherapyRecommendation withAuthor(String author) {
         this.author = author;
+        return this;
+    }
+
+    @JsonProperty("caseId")
+    public String getCaseId() {
+        return caseId;
+    }
+
+    @JsonProperty("caseId")
+    public void setCaseId(String caseId) {
+        this.caseId = caseId;
+    }
+
+    public TherapyRecommendation withCaseId(String caseId) {
+        this.caseId = caseId;
         return this;
     }
 
@@ -138,6 +158,21 @@ public class TherapyRecommendation {
 
     public TherapyRecommendation withId(String id) {
         this.id = id;
+        return this;
+    }
+
+    @JsonProperty("studyId")
+    public String getStudyId() {
+        return studyId;
+    }
+  
+    @JsonProperty("studyId")
+    public void setStudyId(String studyId) {
+        this.studyId = studyId;
+    }
+  
+    public TherapyRecommendation withStudyId(String studyId) {
+        this.studyId = studyId;
         return this;
     }
 
